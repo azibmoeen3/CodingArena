@@ -1,0 +1,47 @@
+export const problems = [
+  {
+    id: 1,
+    title: "Two Sum",
+    slug: "two-sum",
+    difficulty: "Easy",
+    category: "Array",
+    acceptance: "50.0%",
+    description: "Given an array of integers nums and an integer target, return indices of the two numbers such that they add up to target.",
+  },
+  {
+    id: 2,
+    title: "Add Two Numbers",
+    slug: "add-two-numbers",
+    difficulty: "Medium",
+    category: "Linked List",
+    acceptance: "40.0%",
+    description: "You are given two non-empty linked lists representing two non-negative integers. The digits are stored in reverse order, and each of their nodes contains a single digit.",
+  },
+  {
+    id: 3,
+    title: "Longest Substring Without Repeating Characters",
+    slug: "longest-substring-without-repeating-characters",
+    difficulty: "Medium",
+    category: "String",
+    acceptance: "35.0%",
+    description: "Given a string s, find the length of the longest substring without repeating characters.",
+  },
+  {
+    id: 4,
+    title: "Median of Two Sorted Arrays",
+    slug: "median-of-two-sorted-arrays",
+    difficulty: "Hard",
+    category: "Array",
+    acceptance: "38.0%",
+    description: "Given two sorted arrays nums1 and nums2 of size m and n respectively, return the median of the two sorted arrays.",
+  },
+  {
+    id: 5,
+    title: "Palindrome Number",
+    slug: "palindrome-number",
+    difficulty: "Easy",
+    category: "Math",
+    acceptance: "55.0%",
+    description: "Given an integer x, return true if x is a palindrome, and false otherwise.",
+  }
+];
