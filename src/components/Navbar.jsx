@@ -3,7 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { Code, Trophy, Users, BarChart2, BookOpen, Menu, X, Settings2 } from "lucide-react";
+import { Code, Trophy, Users, BarChart2, BookOpen, Menu, X, Settings2, UserCircle } from "lucide-react";
 import { UserButton, useAuth, useUser } from "@clerk/nextjs";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
@@ -11,6 +11,7 @@ import { useState } from "react";
 const navItems = [
   { name: "Problems", href: "/problems", icon: Code },
   { name: "Community", href: "/community", icon: Users },
+  { name: "Profile", href: "/profile", icon: UserCircle },
   { name: "Admin", href: "/admin", icon: Settings2 },
 ];
 
@@ -21,7 +22,11 @@ export function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   const isAdmin = user?.primaryEmailAddress?.emailAddress === "azibmaher771@gmail.com";
-  const filteredNavItems = navItems.filter(item => item.name !== "Admin" || isAdmin);
+  const filteredNavItems = navItems.filter(item => {
+    if (item.name === "Admin") return isAdmin;
+    if (item.name === "Profile") return !!userId;
+    return true;
+  });
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border/50 bg-card/80 backdrop-blur-xl">

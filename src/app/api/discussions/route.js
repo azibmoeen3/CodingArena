@@ -8,11 +8,11 @@ export async function GET(request) {
     await connectToDatabase();
     const { searchParams } = new URL(request.url);
     const category = searchParams.get("category");
-    
+
     const query = category && category !== "all" ? { category } : {};
-    
+
     const discussions = await Discussion.find(query).sort({ createdAt: -1 });
-    
+
     return NextResponse.json(discussions);
   } catch (error) {
     console.error("Error fetching discussions:", error);
@@ -35,7 +35,7 @@ export async function POST(request) {
     }
 
     await connectToDatabase();
-    
+
     const discussion = await Discussion.create({
       title,
       content,

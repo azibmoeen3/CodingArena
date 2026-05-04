@@ -1,8 +1,16 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import dynamic from "next/dynamic";
+const Editor = dynamic(() => import("@monaco-editor/react"), {
+  ssr: false,
+  loading: () => (
+    <div className="h-full flex items-center justify-center bg-[#111111]">
+      <Loader2 className="h-8 w-8 animate-spin text-primary opacity-20" />
+    </div>
+  )
+});
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
-import Editor from "@monaco-editor/react";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -10,8 +18,9 @@ import { Button } from "@/components/ui/button";
 import {
   Loader2, PlayCircle, Send, ChevronLeft, CheckCircle2, XCircle,
   AlertTriangle, Clock, Tag, Lightbulb, ChevronDown, ChevronUp,
-  RotateCcw, Maximize2, Settings, Terminal
+  RotateCcw, Maximize2, Settings, Terminal, Sparkles, Pencil
 } from "lucide-react";
+import Whiteboard from "./Whiteboard";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
@@ -51,6 +60,10 @@ export default function LeetCodeClone({ problem }) {
 
   // Result details
   const [resultDetails, setResultDetails] = useState(null);
+
+  // AI Hint
+  const [aiHint, setAiHint] = useState("");
+  const [isAiLoading, setIsAiLoading] = useState(false);
 
   const refreshSubmissionHistory = async () => {
     if (!isSignedIn || !userId) return;
@@ -157,6 +170,30 @@ export default function LeetCodeClone({ problem }) {
     }
   };
 
+  const getAiHint = async () => {
+    if (isAiLoading) return;
+    setIsAiLoading(true);
+    try {
+      const response = await fetch("/api/ai/hint", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          problemTitle: problem.title,
+          problemDescription: problem.description,
+          userCode: code,
+          language: language.label,
+        }),
+      });
+      const data = await response.json();
+      if (data.hint) setAiHint(data.hint);
+      else if (data.error) setAiHint(`Error: ${data.error}`);
+    } catch (e) {
+      setAiHint("Failed to get AI hint. Please try again.");
+    } finally {
+      setIsAiLoading(false);
+    }
+  };
+
   const statusBanner = () => {
     if (!resultStatus || !resultDetails) return null;
     const configs = {
@@ -196,23 +233,32 @@ export default function LeetCodeClone({ problem }) {
           <div className="flex items-center gap-3">
             <span className="text-xs font-mono text-muted-foreground bg-white/5 px-2 py-0.5 rounded">#{problem.id}</span>
             <h1 className="text-sm font-semibold tracking-tight">{problem.title}</h1>
-            <span className={`px-2 py-0.5 text-[10px] font-bold rounded-full uppercase tracking-wider shadow-sm ${
-              problem.difficulty === "Easy" ? "bg-green-500/10 text-green-400 border border-green-500/20" :
-              problem.difficulty === "Medium" ? "bg-amber-500/10 text-amber-400 border border-amber-500/20" : 
-              "bg-red-500/10 text-red-400 border border-red-500/20"
-            }`}>
+            <span className={`px-2 py-0.5 text-[10px] font-bold rounded-full uppercase tracking-wider shadow-sm ${problem.difficulty === "Easy" ? "bg-green-500/10 text-green-400 border border-green-500/20" :
+              problem.difficulty === "Medium" ? "bg-amber-500/10 text-amber-400 border border-amber-500/20" :
+                "bg-red-500/10 text-red-400 border border-red-500/20"
+              }`}>
               {problem.difficulty}
             </span>
           </div>
         </div>
         <div className="flex items-center gap-4">
-           <div className="flex items-center gap-2 text-xs text-muted-foreground bg-white/5 px-3 py-1 rounded-lg border border-white/5">
-              <Clock className="h-3 w-3" />
-              <span className="font-mono">00:00:00</span>
-           </div>
-           <Button variant="ghost" size="sm" className="h-8 w-8 p-0 rounded-lg">
-              <Settings className="h-4 w-4 text-muted-foreground" />
-           </Button>
+          <Button
+            onClick={getAiHint}
+            disabled={isAiLoading}
+            variant="ghost"
+            size="sm"
+            className="h-8 text-[10px] font-bold bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 rounded-lg px-3 hidden md:flex"
+          >
+            {isAiLoading ? <Loader2 className="h-3 w-3 animate-spin mr-1.5" /> : <Sparkles className="h-3 w-3 mr-1.5" />}
+            AI Hint
+          </Button>
+          <div className="flex items-center gap-2 text-xs text-muted-foreground bg-white/5 px-3 py-1 rounded-lg border border-white/5">
+            <Clock className="h-3 w-3" />
+            <span className="font-mono">00:00:00</span>
+          </div>
+          <Button variant="ghost" size="sm" className="h-8 w-8 p-0 rounded-lg">
+            <Settings className="h-4 w-4 text-muted-foreground" />
+          </Button>
         </div>
       </header>
 
@@ -221,12 +267,14 @@ export default function LeetCodeClone({ problem }) {
         <Panel defaultSize={45} minSize={30} className="relative">
           <div className="h-full flex flex-col bg-[#0f0f0f] border-r border-white/5">
             <div className="flex border-b border-white/5 bg-card/20 shrink-0">
-              {["description", "editorial", "submissions"].map((tab) => (
+              {["description", "editorial", "submissions", "draw"].map((tab) => (
                 <button key={tab} onClick={() => setLeftTab(tab)}
-                  className={`px-6 py-3 text-xs font-semibold capitalize transition-all relative ${
-                    leftTab === tab ? "text-primary" : "text-muted-foreground hover:text-foreground"
-                  }`}>
-                  {tab}
+                  className={`px-6 py-3 text-xs font-semibold capitalize transition-all relative ${leftTab === tab ? "text-primary" : "text-muted-foreground hover:text-foreground"
+                    }`}>
+                  <div className="flex items-center gap-2">
+                    {tab === "draw" && <Pencil className="h-3 w-3" />}
+                    {tab}
+                  </div>
                   {leftTab === tab && <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary shadow-[0_0_10px_rgba(34,197,94,0.5)]" />}
                 </button>
               ))}
@@ -249,12 +297,12 @@ export default function LeetCodeClone({ problem }) {
 
                   {/* Markdown Content */}
                   <div className="prose prose-premium max-w-none">
-                    <ReactMarkdown 
-                      remarkPlugins={[remarkGfm]} 
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm]}
                       components={{
-                        h1: ({node, ...props}) => <h2 className="text-2xl font-bold text-foreground mb-4" {...props} />,
-                        h2: ({node, ...props}) => <h3 className="text-lg font-bold text-foreground mt-8 mb-4 border-b border-white/5 pb-2" {...props} />,
-                        p: ({node, ...props}) => <p className="mb-4 text-muted-foreground leading-relaxed" {...props} />,
+                        h1: ({ node, ...props }) => <h2 className="text-2xl font-bold text-foreground mb-4" {...props} />,
+                        h2: ({ node, ...props }) => <h3 className="text-lg font-bold text-foreground mt-8 mb-4 border-b border-white/5 pb-2" {...props} />,
+                        p: ({ node, ...props }) => <p className="mb-4 text-muted-foreground leading-relaxed" {...props} />,
                         code({ inline, className, children, ...props }) {
                           const match = /language-(\w+)/.exec(className || "");
                           return !inline && match ? (
@@ -267,7 +315,7 @@ export default function LeetCodeClone({ problem }) {
                             <code className="bg-white/10 px-1.5 py-0.5 rounded text-primary text-xs font-mono" {...props}>{children}</code>
                           );
                         },
-                        li: ({node, ...props}) => <li className="mb-2 list-disc ml-4" {...props} />,
+                        li: ({ node, ...props }) => <li className="mb-2 list-disc ml-4" {...props} />,
                       }}
                     >
                       {problem.description}
@@ -275,31 +323,44 @@ export default function LeetCodeClone({ problem }) {
                   </div>
 
                   {/* Hints Section */}
-                  {problem.hints && problem.hints.length > 0 && (
-                    <div className="space-y-3 pt-6 border-t border-white/5">
-                       <h4 className="text-sm font-bold flex items-center gap-2">
-                          <Lightbulb className="h-4 w-4 text-amber-400" /> Hints
-                       </h4>
-                       <div className="space-y-3">
-                          {problem.hints.map((hint, i) => (
-                            <div key={i} className="group border border-white/5 rounded-xl bg-white/[0.02] overflow-hidden">
-                               <button 
-                                 onClick={() => setShowHints(prev => ({...prev, [i]: !prev[i]}))}
-                                 className="w-full flex items-center justify-between px-4 py-3 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
-                               >
-                                  <span>Hint {i + 1}</span>
-                                  {showHints[i] ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-                               </button>
-                               {showHints[i] && (
-                                 <div className="px-4 pb-4 text-xs text-muted-foreground leading-relaxed animate-in fade-in slide-in-from-top-1">
-                                    {hint}
-                                 </div>
-                               )}
-                            </div>
-                          ))}
-                       </div>
+                  <div className="space-y-4 pt-6 border-t border-white/5">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-sm font-bold flex items-center gap-2">
+                        <Lightbulb className="h-4 w-4 text-amber-400" /> Hints
+                      </h4>
                     </div>
-                  )}
+
+                    {aiHint && (
+                      <div className="p-4 rounded-xl bg-primary/5 border border-primary/20 text-xs text-muted-foreground leading-relaxed animate-in slide-in-from-top-2">
+                        <div className="flex items-center gap-2 mb-2">
+                          <Sparkles className="h-3.5 w-3.5 text-primary" />
+                          <span className="text-[10px] font-bold text-primary uppercase">AI Coach</span>
+                        </div>
+                        {aiHint}
+                      </div>
+                    )}
+
+                    {problem.hints && problem.hints.length > 0 && (
+                      <div className="space-y-3">
+                        {problem.hints.map((hint, i) => (
+                          <div key={i} className="group border border-white/5 rounded-xl bg-white/[0.02] overflow-hidden">
+                            <button
+                              onClick={() => setShowHints(prev => ({ ...prev, [i]: !prev[i] }))}
+                              className="w-full flex items-center justify-between px-4 py-3 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+                            >
+                              <span>Hint {i + 1}</span>
+                              {showHints[i] ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                            </button>
+                            {showHints[i] && (
+                              <div className="px-4 pb-4 text-xs text-muted-foreground leading-relaxed animate-in fade-in slide-in-from-top-1">
+                                {hint}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
 
@@ -312,16 +373,15 @@ export default function LeetCodeClone({ problem }) {
                     </div>
                   ) : submissionHistory.length === 0 ? (
                     <div className="text-center py-20 bg-white/[0.02] rounded-2xl border border-dashed border-white/10">
-                       <Terminal className="h-8 w-8 mx-auto text-white/10 mb-3" />
-                       <p className="text-sm text-muted-foreground">No submissions yet for this problem.</p>
+                      <Terminal className="h-8 w-8 mx-auto text-white/10 mb-3" />
+                      <p className="text-sm text-muted-foreground">No submissions yet for this problem.</p>
                     </div>
                   ) : (
                     submissionHistory.map((s) => (
                       <div key={s._id} className="group glass-card rounded-xl border border-white/5 p-4 hover:border-primary/30 transition-all cursor-pointer">
                         <div className="flex items-center justify-between mb-3">
-                          <span className={`text-sm font-bold tracking-tight ${
-                            s.status === "Accepted" ? "text-green-400" : "text-red-400"
-                          }`}>{s.status}</span>
+                          <span className={`text-sm font-bold tracking-tight ${s.status === "Accepted" ? "text-green-400" : "text-red-400"
+                            }`}>{s.status}</span>
                           <span className="text-[10px] font-mono text-muted-foreground uppercase bg-white/5 px-2 py-0.5 rounded">{s.language}</span>
                         </div>
                         <div className="flex items-center justify-between text-[11px] text-muted-foreground">
@@ -331,6 +391,12 @@ export default function LeetCodeClone({ problem }) {
                       </div>
                     ))
                   )}
+                </div>
+              )}
+
+              {leftTab === "draw" && (
+                <div className="h-full">
+                  <Whiteboard />
                 </div>
               )}
             </div>
@@ -358,7 +424,7 @@ export default function LeetCodeClone({ problem }) {
                       </SelectContent>
                     </Select>
                     <button onClick={handleReset} className="p-2 rounded-lg hover:bg-white/5 text-muted-foreground hover:text-foreground transition-all" title="Reset Code">
-                       <RotateCcw className="h-3.5 w-3.5" />
+                      <RotateCcw className="h-3.5 w-3.5" />
                     </button>
                   </div>
                   <div className="flex items-center gap-2">
@@ -372,7 +438,7 @@ export default function LeetCodeClone({ problem }) {
                     </Button>
                   </div>
                 </div>
-                
+
                 <div className="flex-1 overflow-hidden relative">
                   <Editor
                     key={language.value}
@@ -404,70 +470,68 @@ export default function LeetCodeClone({ problem }) {
             <Panel defaultSize={35} minSize={20}>
               <div className="h-full flex flex-col bg-[#0f0f0f]">
                 <div className="flex border-b border-white/5 bg-card/10 shrink-0">
-                   <button onClick={() => setBottomTab("testcase")}
-                      className={`px-6 py-3 text-[11px] font-bold uppercase tracking-wider transition-all relative ${
-                        bottomTab === "testcase" ? "text-foreground" : "text-muted-foreground hover:text-foreground"
+                  <button onClick={() => setBottomTab("testcase")}
+                    className={`px-6 py-3 text-[11px] font-bold uppercase tracking-wider transition-all relative ${bottomTab === "testcase" ? "text-foreground" : "text-muted-foreground hover:text-foreground"
                       }`}>
-                      Test Cases
-                      {bottomTab === "testcase" && <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />}
-                   </button>
-                   <button onClick={() => setBottomTab("result")}
-                      className={`px-6 py-3 text-[11px] font-bold uppercase tracking-wider transition-all relative ${
-                        bottomTab === "result" ? "text-foreground" : "text-muted-foreground hover:text-foreground"
+                    Test Cases
+                    {bottomTab === "testcase" && <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />}
+                  </button>
+                  <button onClick={() => setBottomTab("result")}
+                    className={`px-6 py-3 text-[11px] font-bold uppercase tracking-wider transition-all relative ${bottomTab === "result" ? "text-foreground" : "text-muted-foreground hover:text-foreground"
                       }`}>
-                      Result
-                      {bottomTab === "result" && <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />}
-                      {resultStatus === 'accepted' && <span className="ml-2 w-1.5 h-1.5 rounded-full bg-green-400 inline-block animate-pulse" />}
-                   </button>
+                    Result
+                    {bottomTab === "result" && <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />}
+                    {resultStatus === 'accepted' && <span className="ml-2 w-1.5 h-1.5 rounded-full bg-green-400 inline-block animate-pulse" />}
+                  </button>
                 </div>
 
                 <div className="flex-1 overflow-y-auto custom-scrollbar p-5">
-                   {bottomTab === "testcase" && (
-                     <div className="space-y-5 animate-in fade-in duration-300">
-                        <div className="space-y-2">
-                           <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest ml-1">Input (stdin)</label>
-                           <textarea
-                             value={userStdin}
-                             onChange={(e) => setUserStdin(e.target.value)}
-                             className="w-full p-4 rounded-xl bg-white/[0.03] border border-white/10 text-sm font-mono focus:outline-none focus:border-primary/30 transition-all min-h-[80px]"
-                             placeholder="Enter test inputs here..."
-                           />
-                        </div>
-                        <div className="space-y-2">
-                           <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest ml-1">Expected Output</label>
-                           <textarea
-                             value={userExpectedOutput}
-                             onChange={(e) => setUserExpectedOutput(e.target.value)}
-                             className="w-full p-4 rounded-xl bg-white/[0.03] border border-white/10 text-sm font-mono focus:outline-none focus:border-primary/30 transition-all min-h-[80px]"
-                             placeholder="Optional expected output for comparison..."
-                           />
-                        </div>
-                     </div>
-                   )}
+                  {bottomTab === "testcase" && (
+                    <div className="space-y-5 animate-in fade-in duration-300">
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest ml-1">Input (stdin)</label>
+                        <textarea
+                          value={userStdin}
+                          onChange={(e) => setUserStdin(e.target.value)}
+                          className="w-full p-4 rounded-xl bg-white/[0.03] border border-white/10 text-sm font-mono focus:outline-none focus:border-primary/30 transition-all min-h-[80px]"
+                          placeholder="Enter test inputs here..."
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest ml-1">Expected Output</label>
+                        <textarea
+                          value={userExpectedOutput}
+                          onChange={(e) => setUserExpectedOutput(e.target.value)}
+                          className="w-full p-4 rounded-xl bg-white/[0.03] border border-white/10 text-sm font-mono focus:outline-none focus:border-primary/30 transition-all min-h-[80px]"
+                          placeholder="Optional expected output for comparison..."
+                        />
+                      </div>
+                    </div>
+                  )}
 
-                   {bottomTab === "result" && (
-                     <div className="space-y-6 animate-in zoom-in-95 duration-300">
-                        {statusBanner()}
-                        {output ? (
-                          <div className="space-y-3">
-                             <div className="flex items-center justify-between">
-                                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Output Logs</span>
-                                <button onClick={() => setOutput("")} className="text-[10px] font-bold text-primary hover:underline">Clear</button>
-                             </div>
-                             <pre className="p-5 rounded-xl bg-black border border-white/5 text-sm font-mono text-muted-foreground leading-relaxed whitespace-pre-wrap overflow-x-auto shadow-inner">
-                                {output}
-                             </pre>
+                  {bottomTab === "result" && (
+                    <div className="space-y-6 animate-in zoom-in-95 duration-300">
+                      {statusBanner()}
+                      {output ? (
+                        <div className="space-y-3">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Output Logs</span>
+                            <button onClick={() => setOutput("")} className="text-[10px] font-bold text-primary hover:underline">Clear</button>
                           </div>
-                        ) : (
-                          <div className="flex flex-col items-center justify-center py-12 text-center">
-                             <div className="p-4 rounded-full bg-white/5 mb-4 border border-white/10">
-                                <PlayCircle className="h-8 w-8 text-white/20" />
-                             </div>
-                             <p className="text-sm text-muted-foreground font-medium">Run your code to see the magic happen here.</p>
+                          <pre className="p-5 rounded-xl bg-black border border-white/5 text-sm font-mono text-muted-foreground leading-relaxed whitespace-pre-wrap overflow-x-auto shadow-inner">
+                            {output}
+                          </pre>
+                        </div>
+                      ) : (
+                        <div className="flex flex-col items-center justify-center py-12 text-center">
+                          <div className="p-4 rounded-full bg-white/5 mb-4 border border-white/10">
+                            <PlayCircle className="h-8 w-8 text-white/20" />
                           </div>
-                        )}
-                     </div>
-                   )}
+                          <p className="text-sm text-muted-foreground font-medium">Run your code to see the magic happen here.</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             </Panel>
